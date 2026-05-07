@@ -1,38 +1,90 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import LabelEncoder
+from faker import Faker
 import random
+from datetime import datetime, timedelta
 
+fake = Faker()
 random.seed(42)
 np.random.seed(42)
+Faker.seed(42)
 
-vendors_genuine = ['TechCorp', 'InfoSys', 'DataPro', 'NetSol', 'CloudBase', 'SoftNet', 'DigiTech', 'InfoPro']
-vendors_fraud = ['FakeCorp', 'GhostInc', 'ShadowLtd', 'PhantomCo', 'DummyInc']
+# ─── Generate 300 unique genuine vendors ───────────────────────────────────────
+genuine_vendors = list(set([fake.company() for _ in range(400)]))[:300]
+
+# ─── Generate 80 unique fraud vendors ──────────────────────────────────────────
+fraud_vendors = list(set([fake.company() for _ in range(120)]))[:80]
+
+# ─── Date range: last 1.5 years ─────────────────────────────────────────────────
+start_date = datetime(2023, 1, 1)
+end_date   = datetime(2024, 6, 30)
+
+def random_date():
+    delta = end_date - start_date
+    return (start_date + timedelta(days=random.randint(0, delta.days))).strftime("%Y-%m-%d")
+
+def random_file_path(invoice_num):
+    return f"data/invoices/INV-{invoice_num:05d}.pdf"
+
+# ─── Departments ────────────────────────────────────────────────────────────────
+departments = ['IT', 'HR', 'Finance', 'Operations', 'Marketing', 'Legal', 'Admin']
+
+# ─── Payment terms ──────────────────────────────────────────────────────────────
+payment_terms = ['Net 30', 'Net 60', 'Net 90', 'Immediate', 'Net 15']
 
 data = []
+invoice_num = 1
 
-for i in range(0, 7000):
-    vendor = random.choice(vendors_genuine)
-    amount = random.randint(3000, 20000)
-    days_overdue = random.randint(0, 10)
+# ─── 7000 Genuine invoices ──────────────────────────────────────────────────────
+for _ in range(7000):
+    vendor          = random.choice(genuine_vendors)
+    amount          = round(random.uniform(1000, 25000), 2)
+    date            = random_date()
+    file_path       = random_file_path(invoice_num)
+    days_overdue    = random.randint(0, 15)
     duplicate_count = 1
-    label = 0
-    data.append([vendor, amount, days_overdue, duplicate_count, label])
+    department      = random.choice(departments)
+    payment_term    = random.choice(payment_terms)
+    label           = 0  # genuine
 
-for j in range(0, 3000):
-    fraud_vendor = random.choice(vendors_fraud)
-    fraud_amount = random.randint(40000, 100000)
-    fraud_days_overdue = random.randint(0, 2)
-    fraud_duplicate_count = random.randint(2, 5)
-    fraud_label = 1
-    data.append([fraud_vendor, fraud_amount, fraud_days_overdue, fraud_duplicate_count, fraud_label])
+    data.append([invoice_num, vendor, amount, date, file_path,
+                 days_overdue, duplicate_count, department, payment_term, label])
+    invoice_num += 1
 
-df = pd.DataFrame(data, columns=['vendor', 'amount', 'days_overdue', 'duplicate_count', 'label'])
+# ─── 3000 Fraud invoices ────────────────────────────────────────────────────────
+for _ in range(3000):
+    vendor          = random.choice(fraud_vendors)
+    amount          = round(random.uniform(40000, 150000), 2)  # unusually high
+    date            = random_date()
+    file_path       = random_file_path(invoice_num)
+    days_overdue    = random.randint(0, 3)
+    duplicate_count = random.randint(2, 6)                     # duplicated invoices
+    department      = random.choice(departments)
+    payment_term    = random.choice(payment_terms)
+    label           = 1  # fraud
+
+    data.append([invoice_num, vendor, amount, date, file_path,
+                 days_overdue, duplicate_count, department, payment_term, label])
+    invoice_num += 1
+
+# ─── Build DataFrame ────────────────────────────────────────────────────────────
+columns = ['invoice_number', 'vendor', 'amount', 'date', 'file_path',
+           'days_overdue', 'duplicate_count', 'department', 'payment_term', 'label']
+
+df = pd.DataFrame(data, columns=columns)
 df = df.sample(frac=1).reset_index(drop=True)
+
+# ─── Save CSV ───────────────────────────────────────────────────────────────────
 df.to_csv("invoices_data.csv", index=False)
 
-print("Done! Total rows:", len(df))
-print(df.head())
-print("Fraud:", df['label'].sum())
-print("Genuine:", len(df) - df['label'].sum())
+# ─── Summary ────────────────────────────────────────────────────────────────────
+print("=" * 50)
+print("  Invoice Data Generation Complete!")
+print("=" * 50)
+print(f"  Total invoices   : {len(df)}")
+print(f"  Genuine invoices : {len(df[df['label'] == 0])}")
+print(f"  Fraud invoices   : {len(df[df['label'] == 1])}")
+print(f"  Unique vendors   : {df['vendor'].nunique()}")
+print(f"  Date range       : {df['date'].min()} to {df['date'].max()}")
+print("=" * 50)
+print(df.head(5))
